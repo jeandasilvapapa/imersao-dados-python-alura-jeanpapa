@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 # --- Configuração da Página ---
-# Define o título da página, o ícone e o layout para ocupar a largura inteira.
 st.set_page_config(
     page_title="Dashboard de Salários na Área de Dados - Jean Papa",
     page_icon="📊",
@@ -16,24 +16,19 @@ df = pd.read_csv("https://raw.githubusercontent.com/vqrca/dashboard_salarios_dad
 # --- Barra Lateral (Filtros) ---
 st.sidebar.header("🔍 Filtros")
 
-# Filtro de Ano
 anos_disponiveis = sorted(df['ano'].unique())
 anos_selecionados = st.sidebar.multiselect("Ano", anos_disponiveis, default=anos_disponiveis)
 
-# Filtro de Senioridade
 senioridades_disponiveis = sorted(df['senioridade'].unique())
 senioridades_selecionadas = st.sidebar.multiselect("Senioridade", senioridades_disponiveis, default=senioridades_disponiveis)
 
-# Filtro por Tipo de Contrato
 contratos_disponiveis = sorted(df['contrato'].unique())
 contratos_selecionados = st.sidebar.multiselect("Tipo de Contrato", contratos_disponiveis, default=contratos_disponiveis)
 
-# Filtro por Tamanho da Empresa
 tamanhos_disponiveis = sorted(df['tamanho_empresa'].unique())
 tamanhos_selecionados = st.sidebar.multiselect("Tamanho da Empresa", tamanhos_disponiveis, default=tamanhos_disponiveis)
 
 # --- Filtragem do DataFrame ---
-# O dataframe principal é filtrado com base nas seleções feitas na barra lateral.
 df_filtrado = df[
     (df['ano'].isin(anos_selecionados)) &
     (df['senioridade'].isin(senioridades_selecionadas)) &
@@ -72,6 +67,7 @@ st.subheader("Gráficos")
 
 col_graf1, col_graf2 = st.columns(2)
 
+# Top 10 cargos por salário médio (mantém color='cargo', mas sem legenda visível)
 with col_graf1:
     if not df_filtrado.empty:
         top_cargos = (
@@ -88,24 +84,21 @@ with col_graf1:
             x='usd',
             y='cargo',
             orientation='h',
-            color='cargo',  # mantém uma cor por cargo
+            color='cargo',  # mantém cores por cargo
             title="Top 10 cargos por salário médio",
             labels={'usd': 'Média salarial anual (USD)', 'cargo': ''},
-            # opcional: defina uma paleta qualitativa fixa para consistência
             color_discrete_sequence=px.colors.qualitative.Set2
         )
 
-        # valores nas extremidades das barras
         grafico_cargos.update_traces(
             text=top_cargos['usd'].round(0),
             texttemplate='%{x:,.0f}',
             textposition='outside'
         )
 
-        # ocultar legenda + preservar ordem + margens
         grafico_cargos.update_layout(
             title_x=0.1,
-            showlegend=False,
+            showlegend=False,  # legenda oculta por padrão
             yaxis={'categoryorder': 'array', 'categoryarray': top_cargos['cargo']},
             margin=dict(t=60, b=60, l=10, r=10)
         )
@@ -114,20 +107,116 @@ with col_graf1:
     else:
         st.warning("Nenhum dado para exibir no gráfico de cargos.")
 
+# Distribuição de salários anuais (histograma aprimorado)
 with col_graf2:
     if not df_filtrado.empty:
+        # Controles para refinar o histograma
+        col_opts1, col_opts2, col_opts3 = st.columns([1, 1, 1])
+        with col_opts1:
+            metodo_bins = st.selectbox(
+                "Método de binning",
+                ["Automático", "Freedman–Diaconis", "Sturges", "Scott"],
+                index=0,
+                key="metodo_bins_hist"
+            )
+        with col_opts2:
+            normalizar = st.toggle("Normalizar (densidade)", value=False, key="hist_densidade")
+            cumulativa = st.toggle("Cumulativa", value=False, key="hist_cumulativa")
+        with col_opts3:
+            logx = st.toggle("Escala log no eixo X", value=False, key="hist_logx")
+            comparar_senioridade = st.toggle("Comparar por senioridade", value=False, key="hist_compare_sen")
+
+        s = df_filtrado['usd'].dropna().astype(float)
+        n = s.size
+        if n > 0:
+            x_min, x_max = float(s.min()), float(s.max())
+        else:
+            x_min, x_max = 0.0, 1.0
+        data_range = max(x_max - x_min, 1e-9)
+
+        # Cálculo adaptativo de nbins
+        nbins = None
+        if metodo_bins == "Freedman–Diaconis" and n > 1:
+            q1, q3 = np.percentile(s, [25, 75])
+            iqr = max(q3 - q1, 1e-9)
+            h = 2 * iqr * (n ** (-1/3))
+            if h > 0:
+                nbins = int(np.clip(round(data_range / h), 5, 100))
+        elif metodo_bins == "Scott" and n > 1:
+            sigma = float(np.std(s, ddof=1)) if n > 1 else 0.0
+            h = 3.5 * sigma * (n ** (-1/3))
+            if h > 0:
+                nbins = int(np.clip(round(data_range / h), 5, 100))
+        elif metodo_bins == "Sturges" and n > 1:
+            nbins = int(np.clip(np.ceil(np.log2(n) + 1), 5, 100))
+
+        histnorm = 'probability density' if normalizar else None
+        color = 'senioridade' if comparar_senioridade else None
+        barmode = 'overlay' if comparar_senioridade else 'relative'
+        opacity = 0.55 if comparar_senioridade else 1.0
+
         grafico_hist = px.histogram(
             df_filtrado,
             x='usd',
-            nbins=30,
+            nbins=nbins if nbins else 30,
+            histnorm=histnorm,
+            color=color,
+            barmode=barmode,
+            opacity=opacity,
             title="Distribuição de salários anuais",
-            labels={'usd': 'Faixa salarial (USD)', 'count': ''}
+            labels={'usd': 'Faixa salarial (USD)'},
+            color_discrete_sequence=px.colors.qualitative.Set2
         )
-        grafico_hist.update_layout(title_x=0.1)
+
+        # Curva cumulativa opcional
+        grafico_hist.update_traces(cumulative_enabled=cumulativa)
+
+        # Linhas de referência: média e mediana
+        if n > 0:
+            media = float(s.mean())
+            mediana = float(s.median())
+            grafico_hist.add_vline(
+                x=media, line_dash='dash', line_color='#1f77b4',
+                annotation_text=f"Média ${media:,.0f}", annotation_position='top left'
+            )
+            grafico_hist.add_vline(
+                x=mediana, line_dash='dot', line_color='#ff7f0e',
+                annotation_text=f"Mediana ${mediana:,.0f}", annotation_position='top right'
+            )
+
+        # Sombreamento do IQR (25% a 75%), quando houver amostra suficiente
+        if n >= 4:
+            q1, q3 = np.percentile(s, [25, 75])
+            grafico_hist.add_vrect(
+                x0=q1, x1=q3, fillcolor='LightSkyBlue', opacity=0.15,
+                line_width=0, annotation_text="IQR", annotation_position='top left'
+            )
+
+        # Formatação de eixos e hover
+        y_label = 'Densidade' if normalizar else 'Quantidade'
+        grafico_hist.update_layout(
+            title_x=0.1,
+            margin=dict(t=60, b=60, l=10, r=10),
+            legend=dict(orientation='h', y=-0.25)
+        )
+        grafico_hist.update_yaxes(title_text=y_label)
+        grafico_hist.update_xaxes(
+            tickformat=',.0f',
+            type='log' if logx else 'linear',
+            rangeslider=dict(visible=True)
+        )
+
+        grafico_hist.update_traces(
+            hovertemplate="Faixa salarial: $%{x:,.0f}<br>" +
+                          ("Densidade: %{y:.3f}" if normalizar else "Quantidade: %{y:,.0f}") +
+                          "<extra></extra>"
+        )
+
         st.plotly_chart(grafico_hist, use_container_width=True)
     else:
         st.warning("Nenhum dado para exibir no gráfico de distribuição.")
 
+# Gráfico de proporção dos tipos de trabalho
 col_graf3, col_graf4 = st.columns(2)
 
 with col_graf3:
@@ -147,26 +236,27 @@ with col_graf3:
     else:
         st.warning("Nenhum dado para exibir no gráfico dos tipos de trabalho.")
 
+# Mapa por país (exemplo com Cientista de Dados)
 with col_graf4:
     if not df_filtrado.empty:
         df_ds = df_filtrado[df_filtrado['cargo'] == 'Data Scientist']
-        media_ds_pais = df_ds.groupby('residencia_iso3')['usd'].mean().reset_index()
-        grafico_paises = px.choropleth(
-            media_ds_pais,
-            locations='residencia_iso3',
-            color='usd',
-            color_continuous_scale='rdylgn',
-            title='Salário médio de Cientista de Dados por país',
-            labels={'usd': 'Salário médio (USD)', 'residencia_iso3': 'País'}
-        )
-        grafico_paises.update_layout(title_x=0.1)
-        st.plotly_chart(grafico_paises, use_container_width=True)
+        if not df_ds.empty:
+            media_ds_pais = df_ds.groupby('residencia_iso3')['usd'].mean().reset_index()
+            grafico_paises = px.choropleth(
+                media_ds_pais,
+                locations='residencia_iso3',
+                color='usd',
+                color_continuous_scale='rdylgn',
+                title='Salário médio de Cientista de Dados por país',
+                labels={'usd': 'Salário médio (USD)', 'residencia_iso3': 'País'}
+            )
+            grafico_paises.update_layout(title_x=0.1)
+            st.plotly_chart(grafico_paises, use_container_width=True)
+        else:
+            st.info("Não há registros de Cientista de Dados após os filtros selecionados.")
     else:
         st.warning("Nenhum dado para exibir no gráfico de países.")
 
-# --- Tabela de Dados Detalhados --- 51:26
+# --- Tabela de Dados Detalhados ---
 st.subheader("Dados Detalhados")
-
 st.dataframe(df_filtrado)
-
-
