@@ -87,20 +87,20 @@ with col_graf1:
             x='usd',
             y='cargo',
             orientation='h',
-            color='cargo',
+            color_discrete_sequence=['#4E79A7'],
             title="Top 10 cargos por salário médio",
-            labels={'usd': 'Média salarial anual (USD)', 'cargo': ''}
+            labels={'usd': 'Média salarial anual (USD)', 'cargo': ''},
+            text='usd'
         )
         grafico_cargos.update_layout(
             title_x=0.1,
-            yaxis={'categoryorder': 'total ascending'},
-            legend=dict(
-                orientation="h",   # horizontal
-                y=-0.2,            # valor negativo coloca a legenda abaixo do gráfico
-                x=0.5,             # centraliza a legenda
-                xanchor="center",
-                yanchor="top"
-            )
+            yaxis={'categoryorder': 'array', 'categoryarray': top_cargos['cargo']},
+            showlegend=False,
+            margin=dict(t=60, b=60, l=10, r=100)
+        )
+        grafico_cargos.update_traces(
+            texttemplate='%{text:,.0f}',
+            textposition='outside'
         )
         st.plotly_chart(grafico_cargos, use_container_width=True)
     else:
@@ -113,9 +113,12 @@ with col_graf2:
             x='usd',
             nbins=30,
             title="Distribuição de salários anuais",
-            labels={'usd': 'Faixa salarial (USD)', 'count': ''}
+            labels={'usd': 'Faixa salarial (USD)', 'count': 'Quantidade'}
         )
-        grafico_hist.update_layout(title_x=0.1)
+        grafico_hist.update_layout(
+            title_x=0.1,
+            yaxis_title='Quantidade'
+        )
         st.plotly_chart(grafico_hist, use_container_width=True)
     else:
         st.warning("Nenhum dado para exibir no gráfico de distribuição.")
