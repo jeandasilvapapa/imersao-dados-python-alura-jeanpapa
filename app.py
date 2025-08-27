@@ -54,7 +54,10 @@ if not df_filtrado.empty:
     total_registros = df_filtrado.shape[0]
     cargo_mais_frequente = df_filtrado["cargo"].mode()[0]
 else:
-    salario_medio, salario_mediano, salario_maximo, total_registros, cargo_mais_comum = 0, 0, 0, ""
+    salario_medio = 0
+    salario_maximo = 0
+    total_registros = 0
+    cargo_mais_frequente = "-"
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Salário médio", f"${salario_medio:,.0f}")
@@ -71,28 +74,35 @@ col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
     if not df_filtrado.empty:
-        top_cargos = df_filtrado.groupby('cargo')['usd'].mean().nlargest(10).sort_values(ascending=True).reset_index()
+        top_cargos = (
+            df_filtrado
+            .groupby('cargo')['usd']
+            .mean()
+            .nlargest(10)
+            .sort_values(ascending=True)
+            .reset_index()
+        )
         grafico_cargos = px.bar(
-    top_cargos,
-    x='usd',
-    y='cargo',
-    orientation='h',
-    color='cargo',
-    title="Top 10 cargos por salário médio",
-    labels={'usd': 'Média salarial anual (USD)', 'cargo': ''}
-)
-grafico_cargos.update_layout(
-    title_x=0.1,
-    yaxis={'categoryorder':'total ascending'},
-    legend=dict(
-        orientation="h",   # horizontal
-        y=-0.2,            # valor negativo coloca a legenda abaixo do gráfico
-        x=0.5,             # centraliza a legenda
-        xanchor="center",
-        yanchor="top"
-    )
-)
-st.plotly_chart(grafico_cargos, use_container_width=True)
+            top_cargos,
+            x='usd',
+            y='cargo',
+            orientation='h',
+            color='cargo',
+            title="Top 10 cargos por salário médio",
+            labels={'usd': 'Média salarial anual (USD)', 'cargo': ''}
+        )
+        grafico_cargos.update_layout(
+            title_x=0.1,
+            yaxis={'categoryorder': 'total ascending'},
+            legend=dict(
+                orientation="h",   # horizontal
+                y=-0.2,            # valor negativo coloca a legenda abaixo do gráfico
+                x=0.5,             # centraliza a legenda
+                xanchor="center",
+                yanchor="top"
+            )
+        )
+        st.plotly_chart(grafico_cargos, use_container_width=True)
     else:
         st.warning("Nenhum dado para exibir no gráfico de cargos.")
 
@@ -133,12 +143,14 @@ with col_graf4:
     if not df_filtrado.empty:
         df_ds = df_filtrado[df_filtrado['cargo'] == 'Data Scientist']
         media_ds_pais = df_ds.groupby('residencia_iso3')['usd'].mean().reset_index()
-        grafico_paises = px.choropleth(media_ds_pais,
+        grafico_paises = px.choropleth(
+            media_ds_pais,
             locations='residencia_iso3',
             color='usd',
             color_continuous_scale='rdylgn',
             title='Salário médio de Cientista de Dados por país',
-            labels={'usd': 'Salário médio (USD)', 'residencia_iso3': 'País'})
+            labels={'usd': 'Salário médio (USD)', 'residencia_iso3': 'País'}
+        )
         grafico_paises.update_layout(title_x=0.1)
         st.plotly_chart(grafico_paises, use_container_width=True)
     else:
