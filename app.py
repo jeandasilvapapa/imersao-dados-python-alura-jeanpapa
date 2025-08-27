@@ -107,69 +107,41 @@ with col_graf1:
     else:
         st.warning("Nenhum dado para exibir no gráfico de cargos.")
 
-# Distribuição de salários anuais (histograma aprimorado)
+# Distribuição de salários anuais (histograma enxuto com bins adaptativos e linhas de média/mediana)
 with col_graf2:
     if not df_filtrado.empty:
-        # Controles para refinar o histograma
-        col_opts1, col_opts2, col_opts3 = st.columns([1, 1, 1])
-        with col_opts1:
-            metodo_bins = st.selectbox(
-                "Método de binning",
-                ["Automático", "Freedman–Diaconis", "Sturges", "Scott"],
-                index=0,
-                key="metodo_bins_hist"
-            )
-        with col_opts2:
-            normalizar = st.toggle("Normalizar (densidade)", value=False, key="hist_densidade")
-            cumulativa = st.toggle("Cumulativa", value=False, key="hist_cumulativa")
-        with col_opts3:
-            logx = st.toggle("Escala log no eixo X", value=False, key="hist_logx")
-            comparar_senioridade = st.toggle("Comparar por senioridade", value=False, key="hist_compare_sen")
-
         s = df_filtrado['usd'].dropna().astype(float)
         n = s.size
-        if n > 0:
-            x_min, x_max = float(s.min()), float(s.max())
-        else:
-            x_min, x_max = 0.0, 1.0
-        data_range = max(x_max - x_min, 1e-9)
 
-        # Cálculo adaptativo de nbins
-        nbins = None
-        if metodo_bins == "Freedman–Diaconis" and n > 1:
-            q1, q3 = np.percentile(s, [25, 75])
-            iqr = max(q3 - q1, 1e-9)
-            h = 2 * iqr * (n ** (-1/3))
-            if h > 0:
-                nbins = int(np.clip(round(data_range / h), 5, 100))
-        elif metodo_bins == "Scott" and n > 1:
-            sigma = float(np.std(s, ddof=1)) if n > 1 else 0.0
-            h = 3.5 * sigma * (n ** (-1/3))
-            if h > 0:
-                nbins = int(np.clip(round(data_range / h), 5, 100))
-        elif metodo_bins == "Sturges" and n > 1:
-            nbins = int(np.clip(np.ceil(np.log2(n) + 1), 5, 100))
+        # Cálculo adaptativo de nbins: Freedman–Diaconis com fallback para Sturges
+        def calcular_nbins(series: pd.Series) -> int:
+            n_local = series.size
+            if n_local <= 1:
+                return 10
+            q1, q3 = np.percentile(series, [25, 75])
+            iqr = q3 - q1
+            data_range = float(series.max() - series.min())
+            nbins_fd = None
+            if iqr > 0 and data_range > 0:
+                h = 2 * iqr * (n_local ** (-1/3))
+                if h > 0:
+                    nbins_fd = int(np.clip(round(data_range / h), 5, 100))
+            if nbins_fd and nbins_fd >= 5:
+                return nbins_fd
+            # Fallback Sturges
+            nbins_sturges = int(np.clip(np.ceil(np.log2(max(n_local, 2)) + 1), 5, 100))
+            return nbins_sturges
 
-        histnorm = 'probability density' if normalizar else None
-        color = 'senioridade' if comparar_senioridade else None
-        barmode = 'overlay' if comparar_senioridade else 'relative'
-        opacity = 0.55 if comparar_senioridade else 1.0
+        nbins = calcular_nbins(s) if n > 0 else 30
 
         grafico_hist = px.histogram(
             df_filtrado,
             x='usd',
-            nbins=nbins if nbins else 30,
-            histnorm=histnorm,
-            color=color,
-            barmode=barmode,
-            opacity=opacity,
+            nbins=nbins,
             title="Distribuição de salários anuais",
             labels={'usd': 'Faixa salarial (USD)'},
             color_discrete_sequence=px.colors.qualitative.Set2
         )
-
-        # Curva cumulativa opcional
-        grafico_hist.update_traces(cumulative_enabled=cumulativa)
 
         # Linhas de referência: média e mediana
         if n > 0:
@@ -184,32 +156,18 @@ with col_graf2:
                 annotation_text=f"Mediana ${mediana:,.0f}", annotation_position='top right'
             )
 
-        # Sombreamento do IQR (25% a 75%), quando houver amostra suficiente
-        if n >= 4:
-            q1, q3 = np.percentile(s, [25, 75])
-            grafico_hist.add_vrect(
-                x0=q1, x1=q3, fillcolor='LightSkyBlue', opacity=0.15,
-                line_width=0, annotation_text="IQR", annotation_position='top left'
-            )
-
         # Formatação de eixos e hover
-        y_label = 'Densidade' if normalizar else 'Quantidade'
         grafico_hist.update_layout(
             title_x=0.1,
-            margin=dict(t=60, b=60, l=10, r=10),
-            legend=dict(orientation='h', y=-0.25)
+            margin=dict(t=60, b=60, l=10, r=10)
         )
-        grafico_hist.update_yaxes(title_text=y_label)
+        grafico_hist.update_yaxes(title_text='Quantidade')
         grafico_hist.update_xaxes(
-            tickformat=',.0f',
-            type='log' if logx else 'linear',
-            rangeslider=dict(visible=True)
+            tickformat=',.0f'
         )
 
         grafico_hist.update_traces(
-            hovertemplate="Faixa salarial: $%{x:,.0f}<br>" +
-                          ("Densidade: %{y:.3f}" if normalizar else "Quantidade: %{y:,.0f}") +
-                          "<extra></extra>"
+            hovertemplate="Faixa salarial: $%{x:,.0f}<br>Quantidade: %{y:,}<extra></extra>"
         )
 
         st.plotly_chart(grafico_hist, use_container_width=True)
