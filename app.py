@@ -74,6 +74,14 @@ col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
     if not df_filtrado.empty:
+        # Controle para exibir/ocultar a legenda (padrão: oculto)
+        # Se sua versão do Streamlit não tiver st.toggle, use st.checkbox com mesma lógica.
+        mostrar_legenda = st.toggle(
+            "Mostrar legenda do gráfico de cargos (recomendado somente em tela cheia)",
+            value=False,
+            key="legend_cargos"
+        )
+
         top_cargos = (
             df_filtrado
             .groupby('cargo')['usd']
@@ -82,26 +90,43 @@ with col_graf1:
             .sort_values(ascending=True)
             .reset_index()
         )
+
         grafico_cargos = px.bar(
             top_cargos,
             x='usd',
             y='cargo',
             orientation='h',
-            color='cargo',
+            color='cargo',  # mantém cores distintas por cargo
             title="Top 10 cargos por salário médio",
             labels={'usd': 'Média salarial anual (USD)', 'cargo': ''}
         )
+
+        # Mostrar valores nas barras
+        grafico_cargos.update_traces(
+            text=top_cargos['usd'].round(0),
+            texttemplate='%{x:,.0f}',
+            textposition='outside'
+        )
+
+        # Configuração de legenda (apenas quando o toggle estiver ativo)
+        legend_cfg = dict(
+            orientation="h",
+            y=-0.2,   # coloca abaixo do gráfico
+            x=0.5,
+            xanchor="center",
+            yanchor="top"
+        ) if mostrar_legenda else dict()
+
         grafico_cargos.update_layout(
             title_x=0.1,
-            yaxis={'categoryorder': 'total ascending'},
-            legend=dict(
-                orientation="h",   # horizontal
-                y=-0.2,            # valor negativo coloca a legenda abaixo do gráfico
-                x=0.5,             # centraliza a legenda
-                xanchor="center",
-                yanchor="top"
-            )
+            showlegend=mostrar_legenda,
+            legend=legend_cfg,
+            # preserva a mesma ordem do DataFrame no eixo Y
+            yaxis={'categoryorder': 'array', 'categoryarray': top_cargos['cargo']},
+            # margem extra inferior quando a legenda estiver visível
+            margin=dict(t=60, b=(90 if mostrar_legenda else 60), l=10, r=10),
         )
+
         st.plotly_chart(grafico_cargos, use_container_width=True)
     else:
         st.warning("Nenhum dado para exibir no gráfico de cargos.")
@@ -160,3 +185,4 @@ with col_graf4:
 st.subheader("Dados Detalhados")
 
 st.dataframe(df_filtrado)
+
