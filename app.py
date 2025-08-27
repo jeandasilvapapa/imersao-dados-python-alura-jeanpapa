@@ -73,16 +73,26 @@ with col_graf1:
     if not df_filtrado.empty:
         top_cargos = df_filtrado.groupby('cargo')['usd'].mean().nlargest(10).sort_values(ascending=True).reset_index()
         grafico_cargos = px.bar(
-            top_cargos,
-            x='usd',
-            y='cargo',
-            orientation='h',
-            #color='cargo',
-            title="Top 10 cargos por salário médio",
-            labels={'usd': 'Média salarial anual (USD)', 'cargo': ''}
-        )
-        grafico_cargos.update_layout(title_x=0.1, yaxis={'categoryorder':'total ascending'})
-        st.plotly_chart(grafico_cargos, use_container_width=True)
+    top_cargos,
+    x='usd',
+    y='cargo',
+    orientation='h',
+    color='cargo',
+    title="Top 10 cargos por salário médio",
+    labels={'usd': 'Média salarial anual (USD)', 'cargo': ''}
+)
+grafico_cargos.update_layout(
+    title_x=0.1,
+    yaxis={'categoryorder':'total ascending'},
+    legend=dict(
+        orientation="h",   # horizontal
+        y=-0.2,            # valor negativo coloca a legenda abaixo do gráfico
+        x=0.5,             # centraliza a legenda
+        xanchor="center",
+        yanchor="top"
+    )
+)
+st.plotly_chart(grafico_cargos, use_container_width=True)
     else:
         st.warning("Nenhum dado para exibir no gráfico de cargos.")
 
@@ -136,4 +146,5 @@ with col_graf4:
 
 # --- Tabela de Dados Detalhados --- 51:26
 st.subheader("Dados Detalhados")
+
 st.dataframe(df_filtrado)
